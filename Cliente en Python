@@ -1,0 +1,206 @@
+import socket # Importa el módulo socket para la comunicación en red
+import os # Importa el módulo os para interactuar con el sistema operativo
+import shutil # Importa el módulo shutil para operaciones de archivos y directorios
+import tkinter as tk # Importa el módulo tkinter para crear la interfaz gráfica
+from tkinter import filedialog, messagebox, simpledialog # Importa los módulos específicos de tkinter
+
+# Leer las rutas de carpetas desde el archivo "rutas.txt"
+with open("rutas.txt", "r") as f:
+    rutas = f.read().splitlines() # Lee las rutas de las carpetas local y remota desde el archivo "rutas.txt"
+    ruta_local = rutas[0] # Asigna la primera línea del archivo a la ruta de la carpeta local
+    ruta_remota = rutas[1] # Asigna la segunda línea del archivo a la ruta de la carpeta remota
+
+# Crear el socket del cliente
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # Crea un socket TCP/IP
+client_socket.connect(('localhost', 1234)) # Se conecta al servidor en localhost:1234
+print("Conectado al servidor.") # Imprime un mensaje indicando la conexión exitosa
+
+# Variables para almacenar las rutas de carpetas actuales
+ruta_local_actual = ruta_local # Inicializa la ruta de la carpeta local actual
+ruta_remota_actual = ruta_remota # Inicializa la ruta de la carpeta remota actual
+
+# Funciones para las operaciones de archivos y carpetas
+def listar_local():
+    global ruta_local_actual
+    contenido = os.listdir(ruta_local_actual) # Obtiene una lista de archivos y carpetas en la ruta local actual
+    lista_local.delete(0, tk.END) # Limpia la lista de la interfaz gráfica
+    for item in contenido: # Itera sobre los elementos de la lista
+        lista_local.insert(tk.END, item) # Agrega cada elemento a la lista de la interfaz gráfica
+
+def listar_remota():
+    global ruta_remota_actual
+    client_socket.sendall(b"listar_remota") # Envía el comando "listar_remota" al servidor
+    data = client_socket.recv(4096) # Recibe la respuesta del servidor
+    lista_remota.delete(0, tk.END) # Limpia la lista de la interfaz gráfica
+    for item in data.decode('utf-8').split('\n'): # Itera sobre los elementos de la respuesta
+        lista_remota.insert(tk.END, item) # Agrega cada elemento a la lista de la interfaz gráfica
+
+def crear_local():
+    global ruta_local_actual
+    nueva_carpeta = simpledialog.askstring("Nueva Carpeta", "Ingrese el nombre de la nueva carpeta:") # Muestra un cuadro de diálogo para ingresar el nombre de la nueva carpeta
+    if nueva_carpeta: # Si se ingresó un nombre válido
+        nueva_ruta = os.path.join(ruta_local_actual, nueva_carpeta) # Construye la ruta completa de la nueva carpeta
+        if os.path.exists(nueva_ruta): # Si la carpeta ya existe
+            messagebox.showerror("Error", "La carpeta ya existe.") # Muestra un mensaje de error
+        else:
+            try:
+                os.makedirs(nueva_ruta) # Crea la nueva carpeta
+                listar_local() # Actualiza la lista de archivos y carpetas en la interfaz gráfica
+            except OSError as e:
+                messagebox.showerror("Error", f"No se pudo crear la carpeta: {e.strerror}") # Muestra un mensaje de error si ocurrió un problema al crear la carpeta
+
+def eliminar_local():
+    global ruta_local_actual
+    seleccion = lista_local.curselection() # Obtiene el índice del elemento seleccionado en la lista
+    if seleccion: # Si hay un elemento seleccionado
+        item = lista_local.get(seleccion[0]) # Obtiene el nombre del elemento seleccionado
+        ruta_item = os.path.join(ruta_local_actual, item) # Construye la ruta completa del elemento
+        if os.path.isdir(ruta_item): # Si el elemento es una carpeta
+            try:
+                shutil.rmtree(ruta_item) # Elimina la carpeta y su contenido
+                listar_local() # Actualiza la lista de archivos y carpetas en la interfaz gráfica
+            except OSError as e:
+                messagebox.showerror("Error", f"No se pudo eliminar la carpeta: {e.strerror}") # Muestra un mensaje de error si ocurrió un problema al eliminar la carpeta
+        else: # Si el elemento es un archivo
+            try:
+                os.remove(ruta_item) # Elimina el archivo
+                listar_local() # Actualiza la lista de archivos y carpetas en la interfaz gráfica
+            except OSError as e:
+                messagebox.showerror("Error", f"No se pudo eliminar el archivo: {e.strerror}") # Muestra un mensaje de error si ocurrió un problema al eliminar el archivo
+
+def crear_remota():
+    global ruta_remota_actual
+    nueva_carpeta = simpledialog.askstring("Nueva Carpeta", "Ingrese el nombre de la nueva carpeta:") # Muestra un cuadro de diálogo para ingresar el nombre de la nueva carpeta
+    if nueva_carpeta: # Si se ingresó un nombre válido
+        client_socket.sendall(bytes(f"crear_remota:{nueva_carpeta}", encoding='utf-8')) # Envía el comando "crear_remota" y el nombre de la nueva carpeta al servidor
+        respuesta = client_socket.recv(1024).decode('utf-8') # Recibe la respuesta del servidor
+        #if respuesta: # Si la respuesta contiene un mensaje de error
+           # messagebox.showerror("Error", respuesta) # Muestra el mensaje de error
+        listar_remota() # Actualiza la lista de archivos y carpetas en la interfaz gráfica
+
+def eliminar_remota():
+    global ruta_remota_actual
+    seleccion = lista_remota.curselection() # Obtiene el índice del elemento seleccionado en la lista
+    if seleccion: # Si hay un elemento seleccionado
+        item = lista_remota.get(seleccion[0]) # Obtiene el nombre del elemento seleccionado
+        client_socket.sendall(bytes(f"eliminar_remota:{item}", encoding='utf-8')) # Envía el comando "eliminar_remota" y el nombre del elemento al servidor
+        listar_remota() # Actualiza la lista de archivos y carpetas en la interfaz gráfica
+
+def cambiar_directorio_remota(evento):
+    global ruta_remota_actual
+    seleccion = lista_remota.curselection()  # Obtiene el índice del elemento seleccionado en la lista
+    if seleccion:  # Si hay un elemento seleccionado
+        item = lista_remota.get(seleccion[0])  # Obtiene el nombre del elemento seleccionado
+        nueva_ruta = os.path.join(ruta_remota_actual, item)  # Construye la ruta completa del nuevo directorio
+        nueva_ruta = os.path.normpath(nueva_ruta)  # Normalizar la ruta
+        ruta_remota_actual = nueva_ruta
+        print("Nueva ruta", nueva_ruta)
+        if os.path.isdir(nueva_ruta):  # Si el elemento es una carpeta
+            client_socket.sendall(bytes(f"cambiar_directorio_remota:{item}", encoding='utf-8'))  # Envía la ruta absoluta al servidor
+            data = client_socket.recv(4096)  # Recibe la respuesta del servidor
+            lista_remota.delete(0, tk.END)  # Limpia la lista de la interfaz gráfica
+            for item in data.decode('utf-8').split('\n'):  # Itera sobre los elementos de la respuesta
+                lista_remota.insert(tk.END, item)  # Agrega cada elemento a la lista de la interfaz gráfica
+        else:
+            ruta_remota_actual = os.path.dirname(ruta_remota_actual) # Actualiza la ruta de la carpeta local actual al directorio padre
+            messagebox.showerror("Error", "No es un valor valido.")  # Muestra un mensaje de error si el elemento seleccionado no es una carpeta válida
+
+
+def regresar_directorio_remota():
+    global ruta_remota_actual
+    client_socket.sendall(bytes(f"regresar_directorio_remota:{os.path.relpath(ruta_remota_actual, ruta_remota)}", encoding='utf-8')) # Envía el comando "regresar_directorio_remota" y la ruta relativa al servidor
+    data = client_socket.recv(4096) # Recibe la respuesta del servidor
+    lista_remota.delete(0, tk.END) # Limpia la lista de la interfaz gráfica
+    if ruta_remota_actual != ruta_remota: 
+        ruta_remota_actual =  os.path.dirname(ruta_remota_actual)
+    for item in data.decode('utf-8').split('\n'): # Itera sobre los elementos de la respuesta
+        lista_remota.insert(tk.END, item) # Agrega cada elemento a la lista de la interfaz gráfic
+
+def cambiar_directorio_local(evento):
+    global ruta_local_actual
+    try:
+        seleccion_local = lista_local.curselection() # Obtiene el índice del elemento seleccionado en la lista
+        if seleccion_local: # Si hay un elemento seleccionado
+            nueva_ruta_local = os.path.join(ruta_local_actual, lista_local.get(seleccion_local)) # Construye la ruta completa del nuevo directorio
+            if os.path.isdir(nueva_ruta_local): # Si el elemento es una carpeta
+                ruta_local_actual = nueva_ruta_local # Actualiza la ruta de la carpeta local actual
+                listar_local() # Actualiza la lista de archivos y carpetas en la interfaz gráfica
+    except Exception:
+        messagebox.showerror("Error", "No se pudo cambiar de directorio.") # Muestra un mensaje de error si ocurrió un problema al cambiar de directorio
+
+def regresar_directorio_local():
+    global ruta_local_actual
+    if ruta_local_actual != ruta_local: # Si la carpeta actual no es la carpeta raíz
+        ruta_local_actual = os.path.dirname(ruta_local_actual) # Actualiza la ruta de la carpeta local actual al directorio padre
+        listar_local() # Actualiza la lista de archivos y carpetas en la interfaz gráfica
+    else:
+        messagebox.showerror("Error", "Ya estás en la carpeta raíz.") # Muestra un mensaje de error si ya está en la carpeta raíz
+
+def salir_aplicacion():
+    client_socket.close() # Cierra el socket del cliente
+    root.quit() # Cierra la ventana de la interfaz gráfica
+
+# Interfaz gráfica
+root = tk.Tk() # Crea la ventana principal de la interfaz gráfica
+root.title("Administrador de Archivos") # Establece el título de la ventana
+
+# Frame para la carpeta local
+frame_local = tk.LabelFrame(root, text="Carpeta Local") # Crea un marco con etiqueta "Carpeta Local"
+frame_local.pack(side=tk.LEFT, padx=10, pady=10, fill=tk.BOTH, expand=True) # Agrega el marco a la ventana principal
+
+lista_local = tk.Listbox(frame_local, width=40, height=15) # Crea una lista para mostrar los archivos y carpetas locales
+lista_local.pack(side=tk.LEFT, padx=10, pady=10, fill=tk.BOTH, expand=True) # Agrega la lista al marco
+lista_local.bind("<Double-1>", lambda event: cambiar_directorio_local(event)) # Asigna la función cambiar_directorio_local al doble clic en la lista
+
+scrollbar_local = tk.Scrollbar(frame_local) # Crea una barra de desplazamiento para la lista local
+scrollbar_local.pack(side=tk.RIGHT, fill=tk.Y) # Agrega la barra de desplazamiento al marco
+lista_local.config(yscrollcommand=scrollbar_local.set) # Configura la lista para utilizar la barra de desplazamiento
+scrollbar_local.config(command=lista_local.yview) # Configura la barra de desplazamiento para controlar la lista
+
+btn_listar_local = tk.Button(frame_local, text="Listar", command=listar_local) # Crea un botón para listar los archivos y carpetas locales
+btn_listar_local.pack(side=tk.TOP, pady=5) # Agrega el botón al marco
+
+btn_crear_local = tk.Button(frame_local, text="Crear Carpeta", command=crear_local) # Crea un botón para crear una nueva carpeta local
+btn_crear_local.pack(side=tk.TOP, pady=5) # Agrega el botón al marco
+
+btn_eliminar_local = tk.Button(frame_local, text="Eliminar", command=eliminar_local) # Crea un botón para eliminar archivos o carpetas locales
+btn_eliminar_local.pack(side=tk.TOP, pady=5) # Agrega el botón al marco
+
+btn_regresar_local = tk.Button(frame_local, text="Regresar", command=regresar_directorio_local) # Crea un botón para regresar al directorio padre local
+btn_regresar_local.pack(side=tk.TOP, pady=5) # Agrega el botón al marco
+
+# Frame para la carpeta remota
+frame_remota = tk.LabelFrame(root, text="Carpeta Remota") # Crea un marco con etiqueta "Carpeta Remota"
+frame_remota.pack(side=tk.RIGHT, padx=10, pady=10, fill=tk.BOTH, expand=True) # Agrega el marco a la ventana principal
+
+lista_remota = tk.Listbox(frame_remota, width=40, height=15) # Crea una lista para mostrar los archivos y carpetas remotos
+lista_remota = tk.Listbox(frame_remota, width=40, height=15)
+lista_remota.pack(side=tk.LEFT, padx=10, pady=10, fill=tk.BOTH, expand=True)
+lista_remota.bind("<Double-1>", lambda event: cambiar_directorio_remota(event))
+
+scrollbar_remota = tk.Scrollbar(frame_remota)
+scrollbar_remota.pack(side=tk.RIGHT, fill=tk.Y)
+lista_remota.config(yscrollcommand=scrollbar_remota.set)
+scrollbar_remota.config(command=lista_remota.yview)
+
+btn_listar_remota = tk.Button(frame_remota, text="Listar", command=listar_remota)
+btn_listar_remota.pack(side=tk.TOP, pady=5)
+
+btn_crear_remota = tk.Button(frame_remota, text="Crear Carpeta", command=crear_remota)
+btn_crear_remota.pack(side=tk.TOP, pady=5)
+
+btn_eliminar_remota = tk.Button(frame_remota, text="Eliminar", command=eliminar_remota)
+btn_eliminar_remota.pack(side=tk.TOP, pady=5)
+
+btn_regresar_remota = tk.Button(frame_remota, text="Regresar", command=regresar_directorio_remota)
+btn_regresar_remota.pack(side=tk.TOP, pady=5)
+
+btn_salir = tk.Button(root, text="Salir", command=salir_aplicacion)
+btn_salir.pack(side=tk.BOTTOM, pady=10)
+
+# Inicializar las listas de carpetas
+listar_local()
+listar_remota()
+
+# Iniciar el bucle principal de la interfaz gráfica
+root.mainloop() 
