@@ -136,6 +136,25 @@ def regresar_directorio_local():
     else:
         messagebox.showerror("Error", "Ya estás en la carpeta raíz.") # Muestra un mensaje de error si ya está en la carpeta raíz
 
+def enviar_archivo():
+    seleccion = lista_local.curselection() # Obtiene el índice del elemento seleccionado en la lista
+    if seleccion: # Si hay un elemento seleccionado
+        ruta_archivo = os.path.join(ruta_local_actual, lista_local.get(seleccion[0])) # Construye la ruta completa del archivo
+
+    nombre_archivo = os.path.basename(ruta_archivo) # Obtiene el nombre del archivo
+    client_socket.sendall(bytes(f"enviar_archivo:{nombre_archivo}", encoding='utf-8')) # Envía el comando "enviar_archivo" y el nombre del archivo al servidor
+    with open(ruta_archivo, "rb") as f: # Abre el archivo en modo binario
+        while True: # Bucle para enviar el archivo en bloques
+            data = f.read(4096) # Lee un bloque de datos del archivo
+            if not data: # Si no hay más datos
+                break # Sale del bucle
+            client_socket.sendall(data) # Envía el bloque de datos al servidor
+    client_socket.sendall(bytes("fin_archivo", encoding='utf-8')) # Envía un comando para indicar el fin del archivo
+
+    lista_remota.delete(0, tk.END) # Limpia la lista de la interfaz gráfica
+    listar_remota() # Actualiza la lista de archivos y carpetas en la interfaz gráfica
+    messagebox.showinfo("Información", "El archivo se ha enviado correctamente.") # Muestra un mensaje de información
+
 def salir_aplicacion():
     client_socket.close() # Cierra el socket del cliente
     root.quit() # Cierra la ventana de la interfaz gráfica
@@ -168,6 +187,9 @@ btn_eliminar_local.pack(side=tk.TOP, pady=5) # Agrega el botón al marco
 
 btn_regresar_local = tk.Button(frame_local, text="Regresar", command=regresar_directorio_local) # Crea un botón para regresar al directorio padre local
 btn_regresar_local.pack(side=tk.TOP, pady=5) # Agrega el botón al marco
+
+btn_enviar_archivo = tk.Button(frame_local, text="Enviar Archivo", command=enviar_archivo) # Crea un botón para enviar un archivo al servidor
+btn_enviar_archivo.pack(side=tk.TOP, pady=5) # Agrega el botón al marco
 
 # Frame para la carpeta remota
 frame_remota = tk.LabelFrame(root, text="Carpeta Remota") # Crea un marco con etiqueta "Carpeta Remota"
