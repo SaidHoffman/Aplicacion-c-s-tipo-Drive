@@ -1,4 +1,0 @@
-1 - Instalar J# (vjredist64.exe).
-2 - Instalar el VBB (VBB 4.46.msi)
-3 - Abrir la carpeta Crack y copiar el archivo VBB.exe dentro del directorio donde fue instalado el VBB.
-Generalmente C:\Program Files\Virtual Breadboard
